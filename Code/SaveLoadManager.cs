@@ -1,8 +1,10 @@
-﻿using System;
+﻿using BB.SaveLoadSystem.Surrogates;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Reflection;
+using System.Runtime.Serialization;
 using System.Runtime.Serialization.Formatters.Binary;
 using UnityEngine;
 
@@ -12,6 +14,10 @@ namespace BB.SaveLoadSystem
     {
         // Singleton
         private static SaveLoadManager _instance;
+
+        /// <summary>
+        /// Get singleton instance to this object
+        /// </summary>
         public static SaveLoadManager Instance
         {
             get
@@ -30,8 +36,19 @@ namespace BB.SaveLoadSystem
         /// </summary>
         public List<MonoBehaviour> savables = new List<MonoBehaviour>();
 
+        /// <summary>
+        /// We use binary serialization
+        /// </summary>
+        private BinaryFormatter _formatter;
+
+        /// <summary>
+        /// Contains surrogates for unity types like Vector or Color
+        /// </summary>
+        private SurrogateSelector _surrogateSelector;
+
         private void Awake()
         {
+            // Singleton
             if (_instance == null)
             {
                 _instance = this;
@@ -40,6 +57,22 @@ namespace BB.SaveLoadSystem
             {
                 Destroy(_instance.gameObject);
             }
+
+            CreateBinaryFormatter();
+        }
+
+        private void CreateBinaryFormatter()
+        {
+            _formatter = new BinaryFormatter();
+            _surrogateSelector = new SurrogateSelector();
+            _surrogateSelector.AddSurrogate(typeof(Vector2), new StreamingContext(StreamingContextStates.All), new Vector2Surrogate());
+            _surrogateSelector.AddSurrogate(typeof(Vector3), new StreamingContext(StreamingContextStates.All), new Vector3Surrogate());
+            _surrogateSelector.AddSurrogate(typeof(Vector4), new StreamingContext(StreamingContextStates.All), new Vector4Surrogate());
+            _surrogateSelector.AddSurrogate(typeof(Quaternion), new StreamingContext(StreamingContextStates.All), new QuaternionSurrogate());
+            _surrogateSelector.AddSurrogate(typeof(Color), new StreamingContext(StreamingContextStates.All), new ColorSurrogate());
+            _surrogateSelector.AddSurrogate(typeof(Color32), new StreamingContext(StreamingContextStates.All), new Color32Surrogate());
+
+            _formatter.SurrogateSelector = _surrogateSelector;
         }
 
         /// <summary>
@@ -49,11 +82,15 @@ namespace BB.SaveLoadSystem
         /// <returns></returns>
         public bool Save(string fileName)
         {
-            var formatter = new BinaryFormatter();
+            // Generate data
             var packedData = GenerateData();
-            var file = File.Open(fileName, FileMode.Create);
-            formatter.Serialize(file, packedData);
-            file.Close();
+
+            // Save generated data
+            using (var file = File.Open(fileName, FileMode.Create))
+            {
+                _formatter.Serialize(file, packedData);
+                file.Close();
+            }
             return true;
         }
 
@@ -64,14 +101,15 @@ namespace BB.SaveLoadSystem
         /// <returns></returns>
         public bool Load(string fileName)
         {
-            var formatter = new BinaryFormatter();
-
-            PackedData data = null;
+            // Load and deserialize data from file
+            List<ObjectFieldData> data = null;
             try
             {
-                var file = File.Open(fileName, FileMode.Open);
-                data = (PackedData)formatter.Deserialize(file);
-                file.Close();
+                using (var file = File.Open(fileName, FileMode.Open))
+                {
+                    data = (List<ObjectFieldData>)_formatter.Deserialize(file);
+                    file.Close();
+                }
             }
             catch (Exception e)
             {
@@ -79,20 +117,25 @@ namespace BB.SaveLoadSystem
                 return false;
             }
 
+            // Now we can use this data to restore fields values
             if (data != null)
             {
-                foreach (var obj in data.objects)
+                foreach (var obj in data)
                 {
-                    UpdateObjectData(obj);
+                    UpdateFieldValue(savables[obj.objectId], obj.fieldName, obj.value);
                 }
             }
 
             return true;
         }
 
-        private PackedData GenerateData()
+        /// <summary>
+        /// Generate packed data ready to serialize and save.
+        /// </summary>
+        /// <returns>Generated data</returns>
+        private List<ObjectFieldData> GenerateData()
         {
-            PackedData packedData = new PackedData();
+            List<ObjectFieldData> packedData = new List<ObjectFieldData>();
 
             int id = 0;
             foreach (var savable in savables)
@@ -103,7 +146,7 @@ namespace BB.SaveLoadSystem
 
                     foreach (var field in savableField)
                     {
-                        packedData.Add(new ObjectData(id, new Value(field.Name, field.GetValue(savable))));
+                        packedData.Add(new ObjectFieldData(id, field.Name, field.GetValue(savable)));
                     }
                 }
                 else
@@ -117,36 +160,11 @@ namespace BB.SaveLoadSystem
             return packedData;
         }
 
-        private void UpdateObjectData(ObjectData obj)
-        {
-            Type type = obj.value.type;
-            if (type != null)
-            {
-                try
-                {
-                    object value = null;
-                    if (obj.value.type.IsPrimitive)
-                    {
-                        value = TypeDescriptor.GetConverter(type).ConvertFromString(obj.value.serializedValue);
-                    }
-                    else
-                    {
-                        value = JsonUtility.FromJson(obj.value.serializedValue, type);
-                    }
-
-                    UpdateFieldValue(savables[obj.id], obj.value.name, value);
-                }
-                catch (Exception e)
-                {
-                    Debug.LogError("Couldn't parse a value: " + obj.value.name + ", error message: " + e.Message);
-                }
-            }
-            else
-            {
-                Debug.LogError("Couldn't find type: " + obj.value.type);
-            }
-        }
-
+        /// <summary>
+        /// Get and return all fields that are marked as "Savable"
+        /// </summary>
+        /// <param name="obj"></param>
+        /// <returns></returns>
         private static FieldInfo[] GetSavableFields(object obj)
         {
             var allFields = obj.GetType().GetFields(BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Public);
@@ -163,6 +181,12 @@ namespace BB.SaveLoadSystem
             return savableFields.ToArray();
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="obj"></param>
+        /// <param name="name"></param>
+        /// <param name="value"></param>
         private static void UpdateFieldValue(object obj, string name, object value)
         {
             // Get all savable fields

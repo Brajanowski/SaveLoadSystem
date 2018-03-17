@@ -141,6 +141,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   startingHealth: 100
+  color: {r: 1, g: 0, b: 0, a: 1}
   additionalData:
     name: John
     energy: 100
