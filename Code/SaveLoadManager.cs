@@ -73,14 +73,18 @@ namespace BB.SaveLoadSystem
                 data = (PackedData)formatter.Deserialize(file);
                 file.Close();
             }
-            catch
+            catch (Exception e)
             {
+                Debug.LogError("Error: " + e.Message);
                 return false;
             }
 
-            foreach (var obj in data.objects)
+            if (data != null)
             {
-                UpdateObjectData(obj);
+                foreach (var obj in data.objects)
+                {
+                    UpdateObjectData(obj);
+                }
             }
 
             return true;
@@ -145,7 +149,7 @@ namespace BB.SaveLoadSystem
 
         private static FieldInfo[] GetSavableFields(object obj)
         {
-            var allFields = obj.GetType().GetFields();
+            var allFields = obj.GetType().GetFields(BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Public);
             List<FieldInfo> savableFields = new List<FieldInfo>();
 
             foreach (var field in allFields)

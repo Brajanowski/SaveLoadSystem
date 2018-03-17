@@ -1,6 +1,4 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEditor;
 
 namespace BB.SaveLoadSystem
@@ -17,7 +15,7 @@ namespace BB.SaveLoadSystem
                 manager = (SaveLoadManager)target;
             }
 
-            EditorGUILayout.LabelField("Savable objects", EditorStyles.helpBox);
+            EditorGUILayout.LabelField("Savable objects\nWarning! Removing or changing this array may break your current saves! Be carefull!", EditorStyles.helpBox);
 
             for (int i = 0; i < manager.savables.Count; ++i)
             {
