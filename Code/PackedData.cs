@@ -7,7 +7,6 @@ namespace BB.SaveLoadSystem
     [Serializable]
     public class PackedData
     {
-        [SerializeField]
         public List<ObjectData> objects;
 
         public void Add(ObjectData objectData)

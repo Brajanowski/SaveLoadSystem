@@ -7,38 +7,34 @@ namespace BB.SaveLoadSystem
     public class Value
     {
         [SerializeField]
-        public string type;
-
-        [SerializeField]
+        public Type type;
         public string name;
-
-        [SerializeField]
-        public string value;
+        public string serializedValue;
 
         public Value()
         {
             name = "";
         }
 
-        public Value(string _name, object _value)
+        public Value(string _name, object value)
         {
-            type = _value.GetType().FullName;
+            type = value.GetType();
             name = _name;
 
-            SetValue(_value);
+            SetValue(value);
         }
 
-        private void SetValue(object _value)
+        private void SetValue(object value)
         {
             // If it's a C# default type like int or float then we can just cast this value to string.
-            if (_value.GetType().ToString().StartsWith("System."))
+            if (value.GetType().IsPrimitive)
             {
-                value = _value.ToString();
+                serializedValue = value.ToString();
             }
             else
             {
                 // Otherwise serialize it to json
-                value = JsonUtility.ToJson(_value);
+                serializedValue = JsonUtility.ToJson(value);
             }
         }
     }

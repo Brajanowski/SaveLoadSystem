@@ -1,17 +1,13 @@
 ﻿using System;
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using BB.SaveLoadSystem;
 
 [Serializable]
 public class TestData
 {
-    [SerializeField]
     public int test = 911;
-
-    [SerializeField]
     public float pi = 3.14f;
+    public string stringTest = "Siema";
 }
 
 public class TestSavableObject : MonoBehaviour
@@ -25,6 +21,7 @@ public class TestSavableObject : MonoBehaviour
     [Savable]
     public Vector3 position = Vector3.up;
 
+    [Savable]
     public Vector2 down = Vector2.down;
 
     public int dontSaveThis = 1337;

@@ -7,10 +7,7 @@ namespace BB.SaveLoadSystem
     [Serializable]
     public class ObjectData
     {
-        [SerializeField]
         public int id;
-
-        [SerializeField]
         public Value value;
 
         public ObjectData(int id, Value value)

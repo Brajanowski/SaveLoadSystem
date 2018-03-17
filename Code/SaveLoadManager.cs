@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Reflection;
+using System.Runtime.Serialization.Formatters.Binary;
 using UnityEngine;
 
 namespace BB.SaveLoadSystem
@@ -48,20 +49,11 @@ namespace BB.SaveLoadSystem
         /// <returns></returns>
         public bool Save(string fileName)
         {
-            var json = GenerateJSON(true);
-            Debug.Log(json);
-
-            try
-            {
-                StreamWriter file = new StreamWriter(fileName);
-                file.Write(json);
-                file.Close();
-            }
-            catch (Exception e)
-            {
-                Debug.Log("Couldn't create file: " + fileName + ", error message: " + e.Message);
-                return false;
-            }
+            var formatter = new BinaryFormatter();
+            var packedData = GenerateData();
+            var file = File.Open(fileName, FileMode.Create);
+            formatter.Serialize(file, packedData);
+            file.Close();
             return true;
         }
 
@@ -72,105 +64,77 @@ namespace BB.SaveLoadSystem
         /// <returns></returns>
         public bool Load(string fileName)
         {
-            string json = GetFileContent(fileName);
-            if (json != null)
+            var formatter = new BinaryFormatter();
+
+            PackedData data = null;
+            try
             {
-                try
-                {
-                    PackedData data = JsonUtility.FromJson<PackedData>(json);
-                    foreach (var obj in data.objects)
-                    {
-                        UpdateObjectData(obj);
-                    }
-                }
-                catch (Exception e)
-                {
-                    Debug.LogError("Couldn't parse a content of file: " + fileName + ", error message: " + e.Message);
-                    return false;
-                }
+                var file = File.Open(fileName, FileMode.Open);
+                data = (PackedData)formatter.Deserialize(file);
+                file.Close();
             }
-            else
+            catch
             {
                 return false;
+            }
+
+            foreach (var obj in data.objects)
+            {
+                UpdateObjectData(obj);
             }
 
             return true;
         }
 
-        private string GetFileContent(string fileName)
-        {
-            StreamReader file;
-            try
-            {
-                string content = "";
-
-                file = new StreamReader(fileName);
-                content = file.ReadToEnd();
-                file.Close();
-
-                return content;
-            }
-            catch (Exception e)
-            {
-                Debug.LogError("Couldn't load file: " + fileName + ", error message: " + e.Message);
-                return null;
-            }
-        }
-
-        private string GenerateJSON(bool pretty)
+        private PackedData GenerateData()
         {
             PackedData packedData = new PackedData();
 
             int id = 0;
             foreach (var savable in savables)
             {
-                var savableField = GetSavableFields(savable);
-
-                foreach (var field in savableField)
+                if (savable != null)
                 {
-                    packedData.Add(new ObjectData(id, new Value(field.Name, field.GetValue(savable))));
+                    var savableField = GetSavableFields(savable);
+
+                    foreach (var field in savableField)
+                    {
+                        packedData.Add(new ObjectData(id, new Value(field.Name, field.GetValue(savable))));
+                    }
+                }
+                else
+                {
+                    Debug.Log("There isn't any object assigned, skipping id: " + id);
                 }
 
                 ++id;
             }
 
-            return JsonUtility.ToJson(packedData, pretty);
+            return packedData;
         }
 
         private void UpdateObjectData(ObjectData obj)
         {
-            string typeName = obj.value.type;
-            if (typeName.StartsWith("UnityEngine."))
-            {
-                typeName += ", UnityEngine";
-            }
-
-            Type type = Type.GetType(typeName);
+            Type type = obj.value.type;
             if (type != null)
             {
-                if (obj.value.type.StartsWith("System."))
+                try
                 {
-                    try
+                    object value = null;
+                    if (obj.value.type.IsPrimitive)
                     {
-                        object value = TypeDescriptor.GetConverter(type).ConvertFromString(obj.value.value);
-                        UpdateFieldValue(savables[obj.id], obj.value.name, value);
+                        value = TypeDescriptor.GetConverter(type).ConvertFromString(obj.value.serializedValue);
                     }
-                    catch
+                    else
                     {
-                        Debug.LogError("Couldn't parse value: " + obj.value.name);
+                        value = JsonUtility.FromJson(obj.value.serializedValue, type);
                     }
+
+                    UpdateFieldValue(savables[obj.id], obj.value.name, value);
                 }
-                else
+                catch (Exception e)
                 {
-                    try
-                    {
-                        object value = JsonUtility.FromJson(obj.value.value, type);
-                        UpdateFieldValue(savables[obj.id], obj.value.name, value);
-                    }
-                    catch (Exception e)
-                    {
-                        Debug.LogError("Couldn't parse a value: " + obj.value.name + ", error message: " + e.Message);
-                    }
+                    Debug.LogError("Couldn't parse a value: " + obj.value.name + ", error message: " + e.Message);
                 }
             }
             else
